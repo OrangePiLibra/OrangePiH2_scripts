@@ -56,44 +56,49 @@ cp $TOP/output/rootfs.cpio.gz $TOP/kernel/output/
 
 # ###########################
 make_kernel() {
-if [ "${1}" = "zero" ]; then
+
     echo "  Building kernel for OPI-Zero ..."
-    echo "  Configuring ..."
-    make ARCH=arm CROSS_COMPILE=${cross_comp}- sun8iw7p1smp_linux_defconfig
+    if [ ! -f $TOP/kernel/.config ]; then
+        echo "  Configuring ..."
+        make ARCH=arm CROSS_COMPILE=${cross_comp}- sun8iw7p1smp_${1}_linux_defconfig
+    fi
     if [ $? -ne 0 ]; then
         echo "  Error: KERNEL NOT BUILT."
         exit 1
     fi
     sleep 1
 
-# #############################################################################
-# build kernel (use -jN, where N is number of cores you can spare for building)
-    echo "  Building kernel & modules ..."
-    make -j6 ARCH=arm CROSS_COMPILE=${cross_comp}- uImage modules 
-    if [ $? -ne 0 ] || [ ! -f arch/arm/boot/uImage ]; then
-        echo "  Error: KERNEL NOT BUILT."
-        exit 1
+    if [ "${2}" = "uImage" -o "${2}" = "all" ]; then
+        echo "  Building kernel"
+        make -j ARCH=arm CROSS_COMPILE=${cross_comp}- uImage 
+        if [ $? -ne 0 ] || [ ! -f arch/arm/boot/uImage ]; then
+            echo "  Error: KERNEL NOT BUILT."
+            exit 1
+        fi
+        # #####################
+        # Copy uImage to output
+        cp arch/arm/boot/uImage $TOP/output/uImage
     fi
-    sleep 1
+
+    if [ "${2}" = "modules" -o "${2}" = "all" ]; then
+        echo " Building modules"
+        make -j ARCH=arm CROSS_COMPILE=${cross_comp}- modules 
+        sleep 1
 # ########################
 # export modules to output
-    echo "  Exporting modules ..."
-    rm -rf output/lib/*
-    make ARCH=arm CROSS_COMPILE=${cross_comp}- INSTALL_MOD_PATH=$TOP/output modules_install 
-    if [ $? -ne 0 ] || [ ! -f arch/arm/boot/uImage ]; then
-        echo "  Error."
+        echo "  Exporting modules ..."
+        rm -rf output/lib/*
+        make ARCH=arm CROSS_COMPILE=${cross_comp}- INSTALL_MOD_PATH=$TOP/output modules_install 
+        if [ $? -ne 0 ] || [ ! -f arch/arm/boot/uImage ]; then
+            echo "  Error."
+        fi
+        echo "  Exporting firmware ..."
+        make ARCH=arm CROSS_COMPILE=${cross_comp}- INSTALL_MOD_PATH=$TOP/output firmware_install
+        if [ $? -ne 0 ] || [ ! -f arch/arm/boot/uImage ]; then
+            echo "  Error."
+        fi
+        sleep 1
     fi
-    echo "  Exporting firmware ..."
-    make ARCH=arm CROSS_COMPILE=${cross_comp}- INSTALL_MOD_PATH=$TOP/output firmware_install
-    if [ $? -ne 0 ] || [ ! -f arch/arm/boot/uImage ]; then
-        echo "  Error."
-    fi
-    sleep 1
-
-    # #####################
-    # Copy uImage to output
-    cp arch/arm/boot/uImage $TOP/output/uImage
-fi
 }
 #==================================================================================
 
@@ -111,7 +116,12 @@ if [ "${1}" = "clean" ]; then
     rm -rf output/* > /dev/null 2>&1
 	rm -rf ../../OrangePi-BuildLinux/orange/lib/* 
 else
-	make_kernel "${1}"
+	make_kernel "${1}" "${2}"
 fi
 
 echo "***OK***"
+clear
+whiptail --title "OrangePi Build System" --msgbox \
+ "`figlet OrangePi` Succeed to build Linux" \
+            15 50 0
+
